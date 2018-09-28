@@ -44,7 +44,7 @@ type AccountActor (accountId) as account =
         context.ActorSelection(transactionProcess + trxId).Tell(e)
 
     let passivateIfApplicable () =
-        if(reservations = Map.empty) then
+       // if(reservations = Map.empty) then
             accountId |> PassivateAccount |> context.Parent.Tell
 
     let publishSideEffects (event : Event) =
@@ -128,9 +128,10 @@ type TransactionProcess (cmd:TransferMoney) as t =
                         | :? AmountReserved ->
                             goto(targetApproving)
                                 .AndThen(fun _ ->
-                                    TransferMoney(cmd.Source,cmd.Target,-cmd.Amount,cmd.TrxId) 
+                                    TransferMoney(cmd.Source,cmd.Target,-cmd.Amount,cmd.TrxId)
                                         |> tellToAccount cmd.Target)
                         | :? TransferRejected ->
+                            cmd.Target |> PassivateAccount |> context.Parent.Tell
                             cmd.TrxId |> PassivateTrx |> context.Parent.Tell
                             stop()
 
@@ -242,6 +243,8 @@ type CommandHandler () as commandHandler =
          let id = cmd.Id
          let count  = accountPassivationQueue.[id] - 1
          if count = 0 then
+            printfn "Stopping account %A" context.Sender
+
             context.Sender.GracefulStop(TimeSpan.FromSeconds(1.0)).Wait()
             accountPassivationQueue <- accountPassivationQueue.Remove id
             accounts <- accounts.Remove(id)
